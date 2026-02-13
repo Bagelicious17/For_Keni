@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Our Eternal Story | Valentine 2026</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,900;1,400&family=Plus+Jakarta+Sans:wght@200;400;700&display=swap');
+
+        :root {
+            --accent: #ff2d55;
+            --bg: #050505;
+        }
+
+        * {
+            cursor: none !important;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg);
+            color: white;
+            overflow-x: hidden;
+            selection-background: var(--accent);
+            scroll-behavior: smooth;
+        }
+
+        .serif { font-family: 'Playfair Display', serif; }
+
+        /* Custom Cursor */
+        #cursor {
+            position: fixed;
+            width: 12px;
+            height: 12px;
+            background: white;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 9999;
+            mix-blend-mode: difference;
+            transition: transform 0.15s ease-out;
+        }
+
+        #cursor-follower {
+            position: fixed;
+            width: 40px;
+            height: 40px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 9998;
+            transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        /* Noise Texture */
+        .noise {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: url('https://grainy-gradients.vercel.app/noise.svg');
+            opacity: 0.06;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        .mesh-gradient {
+            position: fixed;
+            inset: 0;
+            background: 
+                radial-gradient(at 0% 0%, #1a0b2e 0px, transparent 50%),
+                radial-gradient(at 100% 0%, #2e0b1a 0px, transparent 50%),
+                radial-gradient(at 100% 100%, #0b1a2e 0px, transparent 50%),
+                radial-gradient(at 0% 100%, #1a2e0b 0px, transparent 50%);
+            filter: blur(120px);
+            z-index: -1;
+            opacity: 0.4;
+            transition: background 1s ease;
+        }
+
+        /* Smooth Reveal System */
+        .reveal-text {
+            overflow: hidden;
+            display: block;
+        }
+        .reveal-text span {
+            display: block;
+            transform: translateY(110%);
+            transition: transform 1.5s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        .active .reveal-text span { transform: translateY(0); }
+
+        /* Gallery Marquee - Fixed Cropping Issues */
+        .marquee-wrapper {
+            position: relative;
+            padding: 25vh 0; /* More vertical space */
+            /* Reduced the fade from 15% to 5% so images don't look cropped at the edges */
+            mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+            -webkit-mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+            overflow: visible;
+        }
+        .marquee {
+            display: flex;
+            width: fit-content;
+            animation: marquee 60s linear infinite;
+            will-change: transform;
+        }
+        @keyframes marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        /* Timeline Section */
+        .timeline-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.2), transparent);
+            transform: translateX(-50%);
+        }
+
+        .timeline-item {
+            opacity: 0;
+            transform: translateY(50px);
+            transition: all 1s ease;
+        }
+        .timeline-item.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Magnetic Button Effect */
+        .btn-premium {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 1.25rem 3rem;
+            border-radius: 99px;
+            transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+            background: rgba(255,255,255,0.03);
+            backdrop-filter: blur(15px);
+        }
+        .btn-premium:hover {
+            border-color: var(--accent);
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(255, 45, 85, 0.2);
+        }
+
+        #valentine-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.98);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+        }
+
+        .section-tag {
+            font-size: 0.65rem;
+            letter-spacing: 0.4em;
+            text-transform: uppercase;
+            opacity: 0.5;
+            margin-bottom: 2rem;
+            display: block;
+        }
+
+        .floating-card {
+            will-change: transform;
+            transition: transform 0.1s linear;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="cursor"></div>
+    <div id="cursor-follower"></div>
+    <div class="noise"></div>
+    <div class="mesh-gradient" id="mesh"></div>
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full p-8 flex justify-between items-center z-50 mix-blend-difference">
+        <span class="text-sm font-bold tracking-[0.3em] uppercase">Archive / 2024—2026</span>
+        <div class="hidden md:flex gap-12 text-[10px] tracking-widest uppercase opacity-60">
+            <a href="#hero" class="hover:opacity-100 transition-opacity">Intro</a>
+            <a href="#timeline" class="hover:opacity-100 transition-opacity">Chapters</a>
+            <a href="#gallery" class="hover:opacity-100 transition-opacity">Gallery</a>
+            <a href="#question" class="hover:opacity-100 transition-opacity">Final</a>
+        </div>
+    </nav>
+
+    <!-- Section 1: Hero -->
+    <section class="h-screen flex flex-col items-center justify-center text-center px-4 relative" id="hero">
+        <div class="reveal-container">
+            <span class="section-tag reveal-text"><span>Our Shared Universe</span></span>
+            <h1 class="serif text-[13vw] leading-[0.8] mb-4 italic reveal-text">
+                <span>The Eternal</span>
+            </h1>
+            <h1 class="serif text-[13vw] leading-[0.8] mb-12 reveal-text" style="transition-delay: 0.15s">
+                <span>Continuum</span>
+            </h1>
+        </div>
+        <div class="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 opacity-30 animate-bounce">
+            <span class="text-[10px] uppercase tracking-[0.5em]">Scroll to begin</span>
+            <i data-lucide="chevron-down" class="w-4 h-4"></i>
+        </div>
+    </section>
+
+    <!-- Section 2: Narrative Timeline -->
+    <section class="py-40 px-8 relative" id="timeline">
+        <div class="timeline-line"></div>
+        
+        <div class="max-w-5xl mx-auto space-y-40">
+            <!-- Chapter 1 -->
+            <div class="timeline-item flex flex-col md:flex-row items-center gap-12">
+                <div class="md:w-1/2 text-right">
+                    <span class="serif text-6xl italic block mb-4">01.</span>
+                    <h3 class="text-2xl font-bold mb-4 uppercase tracking-tighter">The Spark</h3>
+                    <p class="text-gray-400 leading-relaxed max-w-sm ml-auto">
+                        One of first cute picture that Keni sent me at our early relationship on idul fitri. She's so adorable i could smooch her from the screen.
+                    </p>
+                </div>
+                <div class="w-4 h-4 bg-white rounded-full z-10 shadow-[0_0_20px_white]"></div>
+                <div class="md:w-1/2">
+                    <div class="w-full aspect-video bg-zinc-900 rounded-lg overflow-hidden grayscale hover:grayscale-0 transition-all duration-700">
+                        <img src="./img/keni1.jpeg" class="w-full h-full object-cover">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chapter 2 -->
+            <div class="timeline-item flex flex-col md:flex-row-reverse items-center gap-12">
+                <div class="md:w-1/2 text-left">
+                    <span class="serif text-6xl italic block mb-4">02.</span>
+                    <h3 class="text-2xl font-bold mb-4 uppercase tracking-tighter">The Resonance</h3>
+                    <p class="text-gray-400 leading-relaxed max-w-sm">
+                        one of the first vulgar pic that keni sent, i was so shocked but also excited.
+                    </p>
+                </div>
+                <div class="w-4 h-4 bg-white rounded-full z-10"></div>
+                <div class="md:w-1/2">
+                    <div class="w-full aspect-video bg-zinc-900 rounded-lg overflow-hidden grayscale hover:grayscale-0 transition-all duration-700">
+                        <img src="./img/keni2.jpeg" class="w-full h-full object-cover">
+                    </div>
+                </div>
+            </div>
+
+             <!-- Chapter 3 -->
+             <div class="timeline-item flex flex-col md:flex-row items-center gap-12">
+                <div class="md:w-1/2 text-right">
+                    <span class="serif text-6xl italic block mb-4">03.</span>
+                    <h3 class="text-2xl font-bold mb-4 uppercase tracking-tighter">The Journey</h3>
+                    <p class="text-gray-400 leading-relaxed max-w-sm ml-auto">
+                        keni's most recent and adorable cutie patootie pic that she took when im at gym, proving how much she loves me and how far we've come.
+                    </p>
+                </div>
+                <div class="w-4 h-4 bg-white rounded-full z-10"></div>
+                <div class="md:w-1/2">
+                    <div class="w-full aspect-video bg-zinc-900 rounded-lg overflow-hidden grayscale hover:grayscale-0 transition-all duration-700">
+                        <img src="./img/keni3.jpeg" class="w-full h-full object-cover">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Section 3: Large Cinematic Quote -->
+    <section class="min-h-screen flex items-center justify-center bg-zinc-900/10 px-8">
+        <div class="max-w-6xl">
+            <h2 class="serif text-[6vw] leading-tight italic reveal-item opacity-0">
+                "In a sea of people, my eyes will always find you."
+            </h2>
+        </div>
+    </section>
+
+    <!-- Section 4: Kinetic Gallery -->
+    <section class="py-24 overflow-visible" id="gallery"> 
+        <div class="mb-20 px-12">
+            <span class="section-tag">Visual Archives</span>
+            <h2 class="serif text-6xl italic">Fragments of Us</h2>
+        </div>
+        
+        <div class="marquee-wrapper">
+            <div class="marquee hover:pause">
+                <div class="flex gap-16 pr-16 items-center"> <!-- Added items-center -->
+                    <div class="w-[30vw] h-[45vh] bg-zinc-900 overflow-hidden rounded-sm floating-card">
+                        <img src="./img/collage1.jpeg" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700">
+                    </div>
+                    <div class="w-[20vw] h-[35vh] bg-zinc-900 overflow-hidden rounded-sm floating-card mt-24">
+                        <img src="./img/collage2.jpeg" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700">
+                    </div>
+                    <div class="w-[35vw] h-[45vh] bg-zinc-900 overflow-hidden rounded-sm floating-card">
+                        <img src="./img/collage3.jpeg" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700">
+                    </div>
+                    <div class="w-[25vw] h-[40vh] bg-zinc-900 overflow-hidden rounded-sm floating-card mt-12">
+                        <img src="./img/collage4.jpeg" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700">
+                    </div>
+                </div>
+                <!-- Duplicate for seamless loop -->
+                <div class="flex gap-16 pr-16 items-center">
+                    <div class="w-[30vw] h-[45vh] bg-zinc-900 overflow-hidden rounded-sm floating-card">
+                        <img src="./img/collage8.jpeg" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700">
+                    </div>
+                    <div class="w-[20vw] h-[35vh] bg-zinc-900 overflow-hidden rounded-sm floating-card mt-24">
+                        <img src="./img/collage7.jpeg" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700">
+                    </div>
+                    <div class="w-[35vw] h-[45vh] bg-zinc-900 overflow-hidden rounded-sm floating-card">
+                        <img src="./img/collage6.jpeg" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700">
+                    </div>
+                    <div class="w-[25vw] h-[40vh] bg-zinc-900 overflow-hidden rounded-sm floating-card mt-12">
+                        <img src="./img/collage5.jpeg" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Section 5: The Closing & Question -->
+    <section class="min-h-screen flex flex-col items-center justify-center p-8 relative overflow-hidden" id="question">
+        <div class="absolute inset-0 z-0 opacity-20 pointer-events-none">
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] bg-rose-500/20 blur-[150px] rounded-full"></div>
+        </div>
+        
+        <div class="max-w-4xl text-center relative z-10 reveal-item opacity-0 transition-all duration-1000">
+            <span class="section-tag">2026.02.14</span>
+            <h3 class="serif text-6xl md:text-8xl mb-12 italic leading-tight">
+                Will you be my Valentine?
+            </h3>
+            <p class="text-xl text-gray-400 mb-20 tracking-widest uppercase text-sm">
+                Let's continue writing the story.
+            </p>
+            
+            <div class="flex flex-wrap justify-center gap-12 items-center">
+                <button onclick="handleYes()" class="btn-premium group">
+                    <span class="flex items-center gap-3 font-bold tracking-widest text-sm uppercase">
+                        Yes, Forever <i data-lucide="sparkles" class="w-4 h-4 text-rose-500"></i>
+                    </span>
+                </button>
+                <button id="no-btn" onmouseover="moveNoButton()" class="text-white/30 hover:text-white transition-colors text-[10px] uppercase tracking-[0.5em] px-8 py-4">
+                    Maybe not
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Success Modal -->
+    <div id="valentine-modal">
+        <div class="text-center p-8">
+            <span class="text-rose-500 text-xs tracking-[0.8em] uppercase block mb-12">Confirmed</span>
+            <h2 class="serif text-[12vw] italic text-white leading-none mb-12">See you soon.</h2>
+            <div class="flex flex-col gap-6 items-center opacity-60">
+                <div class="w-px h-24 bg-gradient-to-b from-white to-transparent"></div>
+                <p class="text-[10px] tracking-[0.6em] uppercase">The future belongs to us</p>
+            </div>
+            <button onclick="closeModal()" class="mt-20 opacity-20 hover:opacity-100 transition-opacity uppercase tracking-[0.4em] text-[10px]">
+                Close Archive
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Icons
+        function initLucide() {
+            if (window.lucide) lucide.createIcons();
+        }
+
+        // Custom Cursor with Velocity Tracking
+        const cursor = document.getElementById('cursor');
+        const follower = document.getElementById('cursor-follower');
+        let cursorX = 0, cursorY = 0;
+        let followerX = 0, followerY = 0;
+
+        document.addEventListener('mousemove', (e) => {
+            cursorX = e.clientX;
+            cursorY = e.clientY;
+            
+            cursor.style.transform = `translate(${cursorX - 6}px, ${cursorY - 6}px)`;
+            
+            const target = e.target;
+            if (target.closest('button') || target.closest('.floating-card') || target.closest('a')) {
+                follower.style.width = '80px';
+                follower.style.height = '80px';
+                follower.style.background = 'rgba(255,255,255,0.1)';
+                cursor.style.background = '#ff2d55';
+            } else {
+                follower.style.width = '40px';
+                follower.style.height = '40px';
+                follower.style.background = 'transparent';
+                cursor.style.background = 'white';
+            }
+        });
+
+        function animateFollower() {
+            followerX += (cursorX - followerX - (follower.offsetWidth/2)) * 0.1;
+            followerY += (cursorY - followerY - (follower.offsetHeight/2)) * 0.1;
+            follower.style.transform = `translate(${followerX}px, ${followerY}px)`;
+            requestAnimationFrame(animateFollower);
+        }
+        animateFollower();
+
+        // High-end Mesh Gradient interaction
+        document.addEventListener('mousemove', (e) => {
+            const x = (e.clientX / window.innerWidth) * 100;
+            const y = (e.clientY / window.innerHeight) * 100;
+            const mesh = document.getElementById('mesh');
+            if (mesh) {
+                mesh.style.background = `
+                    radial-gradient(at ${x}% ${y}%, #1a0b2e 0px, transparent 50%),
+                    radial-gradient(at ${100-x}% ${100-y}%, #2e0b1a 0px, transparent 50%),
+                    radial-gradient(at ${y}% ${100-x}%, #0b1a2e 0px, transparent 50%),
+                    radial-gradient(at ${100-y}% ${x}%, #1a2e0b 0px, transparent 50%)
+                `;
+            }
+        });
+
+        // Advanced Intersection Observer
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, { threshold: 0.2 });
+
+        window.onload = () => {
+            initLucide();
+            document.querySelectorAll('#hero, .reveal-item, .timeline-item').forEach(el => observer.observe(el));
+            
+            setTimeout(() => {
+                document.getElementById('hero').classList.add('active');
+            }, 300);
+        };
+
+        // No Button Logic
+        function moveNoButton() {
+            const btn = document.getElementById('no-btn');
+            const x = Math.random() * (window.innerWidth - 300) + 150;
+            const y = Math.random() * (window.innerHeight - 200) + 100;
+            btn.style.position = 'fixed';
+            btn.style.left = `${x}px`;
+            btn.style.top = `${y}px`;
+            btn.style.zIndex = '50';
+            btn.style.transition = 'all 0.4s cubic-bezier(0.23, 1, 0.32, 1)';
+        }
+
+        // Handle Success
+        function handleYes() {
+            const modal = document.getElementById('valentine-modal');
+            modal.style.display = 'flex';
+            setTimeout(() => modal.style.opacity = '1', 50);
+            
+            const duration = 15 * 1000;
+            const end = Date.now() + duration;
+
+            (function frame() {
+              confetti({
+                particleCount: 3,
+                angle: 60,
+                spread: 55,
+                origin: { x: 0 },
+                colors: ['#ff2d55', '#ffffff', '#000000']
+              });
+              confetti({
+                particleCount: 3,
+                angle: 120,
+                spread: 55,
+                origin: { x: 1 },
+                colors: ['#ff2d55', '#ffffff', '#000000']
+              });
+
+              if (Date.now() < end) requestAnimationFrame(frame);
+            }());
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('valentine-modal');
+            modal.style.opacity = '0';
+            setTimeout(() => modal.style.display = 'none', 800);
+        }
+
+        // IMPROVED Parallax and Skew Effect
+        const gallery = document.getElementById('gallery');
+        document.addEventListener('scroll', () => {
+            const scrollY = window.scrollY;
+            
+            // Calculate how far the gallery is from the center of the viewport
+            const galleryRect = gallery.getBoundingClientRect();
+            const galleryCenter = galleryRect.top + galleryRect.height / 2;
+            const viewCenter = window.innerHeight / 2;
+            
+            // Offset is how much to parallax based on visibility
+            const offset = (viewCenter - galleryCenter) * 0.1;
+            const skew = Math.min(Math.max((viewCenter - galleryCenter) * 0.01, -3), 3);
+            
+            const cards = document.querySelectorAll('.floating-card');
+            cards.forEach((card, i) => {
+                const speed = 1 + (i * 0.3);
+                // The movement is now localized to the gallery section's position
+                card.style.transform = `translateY(${offset * speed}px) skewY(${skew}deg)`;
+            });
+        });
+    </script>
+</body>
+</html>

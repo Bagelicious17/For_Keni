@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar & Lunar: The Celestial Trial</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --solar-color: #fbbf24;
+            --lunar-color: #60a5fa;
+            --lava-color: #ef4444;
+            --water-color: #3b82f6;
+            --void-color: #a855f7;
+            --wall-color: #334155;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            border: 4px solid #1e293b;
+            border-radius: 8px;
+        }
+
+        canvas {
+            display: block;
+            background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+        }
+
+        .stat-box {
+            background: rgba(0,0,0,0.6);
+            padding: 10px 20px;
+            border-radius: 20px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #message-screen {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .btn {
+            background: white;
+            color: black;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.2s;
+            pointer-events: all;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+        }
+
+        .controls-hint {
+            position: absolute;
+            bottom: 20px;
+            display: flex;
+            gap: 40px;
+            opacity: 0.7;
+        }
+
+        .key-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .keys {
+            font-family: monospace;
+            background: #334155;
+            padding: 5px 10px;
+            border-radius: 5px;
+            border-bottom: 3px solid #1e293b;
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div class="ui-overlay">
+            <div class="stat-box">Level: <span id="level-num">1</span>/5</div>
+            <div class="stat-box">Solar & Lunar</div>
+        </div>
+
+        <div id="message-screen" class="hidden">
+            <h1 id="msg-title">Level Complete!</h1>
+            <p id="msg-body">Ready for the next trial?</p>
+            <button class="btn" id="msg-btn">Continue</button>
+        </div>
+    </div>
+
+    <div class="controls-hint">
+        <div class="key-group">
+            <span style="color: var(--solar-color)">SOLAR</span>
+            <span class="keys">W A D</span>
+        </div>
+        <div class="key-group">
+            <span style="color: var(--lunar-color)">LUNAR</span>
+            <span class="keys">↑ ← →</span>
+        </div>
+    </div>
+
+    <script>
+        /** @type {HTMLCanvasElement} */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelDisplay = document.getElementById('level-num');
+        const messageScreen = document.getElementById('message-screen');
+        const msgTitle = document.getElementById('msg-title');
+        const msgBody = document.getElementById('msg-body');
+        const msgBtn = document.getElementById('msg-btn');
+
+        // Game Configuration
+        const TILE_SIZE = 40;
+        const GRID_WIDTH = 20;
+        const GRID_HEIGHT = 15;
+        canvas.width = TILE_SIZE * GRID_WIDTH;
+        canvas.height = TILE_SIZE * GRID_HEIGHT;
+
+        const GRAVITY = 0.5;
+        const FRICTION = 0.8;
+        const JUMP_FORCE = -11.5; // Increased from -10 to allow higher jumping
+        const SPEED = 0.6;
+        const MAX_SPEED = 4;
+
+        // Tile Types
+        const TILES = {
+            EMPTY: 0,
+            WALL: 1,
+            LAVA: 2,   // Kills Lunar
+            WATER: 3,  // Kills Solar
+            VOID: 4,   // Kills Both
+            PLATE: 5,  // Pressure plate
+            DOOR: 6,   // Moving door/platform
+            EXIT_S: 7, // Solar Exit
+            EXIT_L: 8, // Lunar Exit
+        };
+
+        // Level Definitions
+        // 0: Empty, 1: Wall, 2: Lava, 3: Water, 4: Void, 5: Plate, 6: Door, 7: ExitS, 8: ExitL
+        const LEVELS = [
+            { // Level 1: Introduction
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+                    [1,1,1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,0,1],
+                    [1,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,2,2,2,4,4,3,3,3,0,0,0,0,0,1], // Added VOID (4) here
+                    [1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                ],
+                solarStart: {x: 60, y: 500},
+                lunarStart: {x: 100, y: 500}
+            },
+            { // Level 2: Cooperation
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,7,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,8,1],
+                    [1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,1,1,1,1,1,6,1,1,1,1,1,1,1,1,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,1,1,1,0,0,5,0,0,1,0,0,0,0,0,1,1,1,1,1],
+                    [1,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,3,3,3,1,0,0,0,0,0,0,2,2,2,0,0,0,0,1],
+                    [1,1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                ],
+                solarStart: {x: 400, y: 500},
+                lunarStart: {x: 450, y: 500},
+                interactables: [{type: 'gate', plateX: 6, plateY: 10, doorX: 8, doorY: 4}]
+            },
+            { // Level 3: The Split
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
+                    [1,7,0,1,1,1,1,0,0,0,1,0,0,0,1,1,1,1,8,1],
+                    [1,1,1,1,1,1,1,0,0,0,1,0,0,0,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,1,1,1,1,1,0,0,1,0,0,1,1,1,1,1,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
+                    [1,0,2,2,2,2,2,0,0,0,1,0,0,0,3,3,3,3,3,1],
+                    [1,1,1,1,1,1,1,0,0,0,1,0,0,0,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                ],
+                solarStart: {x: 40, y: 500},
+                lunarStart: {x: 720, y: 500}
+            },
+            { // Level 4: Precise Jumps
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,1,1,1,1,0,0,0,1,1,0,0,0,1,1,1,1,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,7,0,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,4,4,4,4,4,4,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                ],
+                solarStart: {x: 60, y: 500},
+                lunarStart: {x: 740, y: 500}
+            },
+            { // Level 5: The Grand Finale
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,1,1,1,1,1,6,1,1,6,1,1,1,1,1,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,5,0,1,1,1,1,1,1,1,1,1,1,0,5,0,0,1],
+                    [1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,7,0,1,0,4,4,4,2,2,2,3,3,3,4,4,0,8,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                ],
+                solarStart: {x: 60, y: 500},
+                lunarStart: {x: 740, y: 500},
+                interactables: [
+                    {type: 'gate', plateX: 3, plateY: 5, doorX: 8, doorY: 3},
+                    {type: 'gate', plateX: 16, plateY: 5, doorX: 11, doorY: 3}
+                ]
+            }
+        ];
+
+        class Player {
+            constructor(x, y, color, type) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.width = 24;
+                this.height = 32;
+                this.color = color;
+                this.type = type; // 'solar' or 'lunar'
+                this.isJumping = false;
+                this.alive = true;
+                this.finished = false;
+            }
+
+            update(keys, map, doors) {
+                if (!this.alive || this.finished) return;
+
+                // Input handling
+                if (this.type === 'solar') {
+                    if (keys['KeyA']) this.vx -= SPEED;
+                    if (keys['KeyD']) this.vx += SPEED;
+                    if (keys['KeyW'] && !this.isJumping) {
+                        this.vy = JUMP_FORCE;
+                        this.isJumping = true;
+                    }
+                } else {
+                    if (keys['ArrowLeft']) this.vx -= SPEED;
+                    if (keys['ArrowRight']) this.vx += SPEED;
+                    if (keys['ArrowUp'] && !this.isJumping) {
+                        this.vy = JUMP_FORCE;
+                        this.isJumping = true;
+                    }
+                }
+
+                // Physics
+                this.vx *= FRICTION;
+                this.vy += GRAVITY;
+                
+                if (Math.abs(this.vx) > MAX_SPEED) this.vx = Math.sign(this.vx) * MAX_SPEED;
+
+                // Movement & Collision
+                this.x += this.vx;
+                this.handleCollision(map, doors, true);
+                this.y += this.vy;
+                this.handleCollision(map, doors, false);
+
+                // Bounds
+                if (this.y > canvas.height) this.die();
+            }
+
+            handleCollision(map, doors, horizontal) {
+                const left = Math.floor(this.x / TILE_SIZE);
+                const right = Math.floor((this.x + this.width) / TILE_SIZE);
+                const top = Math.floor(this.y / TILE_SIZE);
+                const bottom = Math.floor((this.y + this.height) / TILE_SIZE);
+
+                for (let i = left; i <= right; i++) {
+                    for (let j = top; j <= bottom; j++) {
+                        if (i < 0 || i >= GRID_WIDTH || j < 0 || j >= GRID_HEIGHT) continue;
+                        
+                        const tile = map[j][i];
+                        
+                        // Solid walls or active doors
+                        let isSolid = (tile === TILES.WALL);
+                        
+                        // Check if it's a door tile and if it's currently active (closed)
+                        doors.forEach(d => {
+                            if (d.x === i && d.y === j && !d.open) isSolid = true;
+                        });
+
+                        if (isSolid) {
+                            if (horizontal) {
+                                if (this.vx > 0) this.x = i * TILE_SIZE - this.width - 0.1;
+                                else if (this.vx < 0) this.x = (i + 1) * TILE_SIZE + 0.1;
+                                this.vx = 0;
+                            } else {
+                                if (this.vy > 0) {
+                                    this.y = j * TILE_SIZE - this.height - 0.1;
+                                    this.isJumping = false;
+                                } else if (this.vy < 0) {
+                                    this.y = (j + 1) * TILE_SIZE + 0.1;
+                                }
+                                this.vy = 0;
+                            }
+                        }
+
+                        // Hazards
+                        if (tile === TILES.LAVA && this.type === 'lunar') this.die();
+                        if (tile === TILES.WATER && this.type === 'solar') this.die();
+                        if (tile === TILES.VOID) this.die();
+
+                        // Exits
+                        if (tile === TILES.EXIT_S && this.type === 'solar') this.finished = true;
+                        if (tile === TILES.EXIT_L && this.type === 'lunar') this.finished = true;
+                    }
+                }
+            }
+
+            die() {
+                if (!this.alive) return;
+                this.alive = false;
+                game.state = 'death';
+                setTimeout(() => game.resetLevel(), 1000);
+            }
+
+            draw() {
+                if (!this.alive) return;
+                ctx.fillStyle = this.color;
+                
+                // Draw body
+                ctx.beginPath();
+                ctx.roundRect(this.x, this.y, this.width, this.height, 5);
+                ctx.fill();
+
+                // Draw Eyes
+                ctx.fillStyle = "white";
+                const eyeSize = 4;
+                const eyeOffset = this.vx > 0 ? 5 : (this.vx < 0 ? -5 : 0);
+                ctx.fillRect(this.x + 6 + eyeOffset, this.y + 8, eyeSize, eyeSize);
+                ctx.fillRect(this.x + 14 + eyeOffset, this.y + 8, eyeSize, eyeSize);
+
+                // Celestial aura
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+            }
+        }
+
+        const game = {
+            levelIndex: 0,
+            solar: null,
+            lunar: null,
+            keys: {},
+            state: 'play', // play, win, death
+            doors: [],
+
+            init() {
+                window.addEventListener('keydown', e => this.keys[e.code] = true);
+                window.addEventListener('keyup', e => this.keys[e.code] = false);
+                msgBtn.addEventListener('click', () => this.nextLevel());
+                this.loadLevel(0);
+                this.loop();
+            },
+
+            loadLevel(index) {
+                this.levelIndex = index;
+                const lvl = LEVELS[index];
+                this.solar = new Player(lvl.solarStart.x, lvl.solarStart.y, '#fbbf24', 'solar');
+                this.lunar = new Player(lvl.lunarStart.x, lvl.lunarStart.y, '#60a5fa', 'lunar');
+                this.doors = [];
+                if (lvl.interactables) {
+                    lvl.interactables.forEach(item => {
+                        this.doors.push({
+                            type: 'gate',
+                            plateX: item.plateX,
+                            plateY: item.plateY,
+                            x: item.doorX,
+                            y: item.doorY,
+                            open: false
+                        });
+                    });
+                }
+                this.state = 'play';
+                levelDisplay.textContent = index + 1;
+                messageScreen.classList.add('hidden');
+            },
+
+            resetLevel() {
+                this.loadLevel(this.levelIndex);
+            },
+
+            nextLevel() {
+                if (this.levelIndex < LEVELS.length - 1) {
+                    this.loadLevel(this.levelIndex + 1);
+                } else {
+                    // Game Over
+                    msgTitle.textContent = "All Trials Complete!";
+                    msgBody.textContent = "You have unified the Sun and the Moon.";
+                    msgBtn.textContent = "Play Again";
+                    msgBtn.onclick = () => location.reload();
+                }
+            },
+
+            update() {
+                if (this.state !== 'play') return;
+
+                const lvl = LEVELS[this.levelIndex];
+                
+                // Update door states based on pressure plates
+                this.doors.forEach(door => {
+                    let activated = false;
+                    // Check if either player is on the plate
+                    [this.solar, this.lunar].forEach(p => {
+                        const px = Math.floor((p.x + p.width/2) / TILE_SIZE);
+                        const py = Math.floor((p.y + p.height) / TILE_SIZE);
+                        if (px === door.plateX && py === door.plateY) activated = true;
+                    });
+                    door.open = activated;
+                });
+
+                this.solar.update(this.keys, lvl.map, this.doors);
+                this.lunar.update(this.keys, lvl.map, this.doors);
+
+                if (this.solar.finished && this.lunar.finished) {
+                    this.state = 'win';
+                    this.showWinScreen();
+                }
+            },
+
+            showWinScreen() {
+                msgTitle.textContent = "Trial Success!";
+                msgBody.textContent = "Synchronicity achieved.";
+                messageScreen.classList.remove('hidden');
+            },
+
+            draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.shadowBlur = 0; // Reset shadow
+
+                const lvl = LEVELS[this.levelIndex];
+                
+                // Draw Map
+                for (let y = 0; y < GRID_HEIGHT; y++) {
+                    for (let x = 0; x < GRID_WIDTH; x++) {
+                        const tile = lvl.map[y][x];
+                        const tx = x * TILE_SIZE;
+                        const ty = y * TILE_SIZE;
+
+                        if (tile === TILES.WALL) {
+                            ctx.fillStyle = '#1e293b';
+                            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+                            ctx.strokeStyle = '#334155';
+                            ctx.strokeRect(tx, ty, TILE_SIZE, TILE_SIZE);
+                        } else if (tile === TILES.LAVA) {
+                            ctx.fillStyle = '#ef4444';
+                            ctx.fillRect(tx, ty + 10, TILE_SIZE, TILE_SIZE - 10);
+                            // Glow
+                            ctx.shadowColor = '#ef4444';
+                            ctx.shadowBlur = 10;
+                        } else if (tile === TILES.WATER) {
+                            ctx.fillStyle = '#3b82f6';
+                            ctx.fillRect(tx, ty + 10, TILE_SIZE, TILE_SIZE - 10);
+                            ctx.shadowColor = '#3b82f6';
+                            ctx.shadowBlur = 10;
+                        } else if (tile === TILES.VOID) {
+                            ctx.fillStyle = '#a855f7';
+                            ctx.fillRect(tx, ty + 10, TILE_SIZE, TILE_SIZE - 10);
+                            ctx.shadowColor = '#a855f7';
+                            ctx.shadowBlur = 10;
+                        } else if (tile === TILES.PLATE) {
+                            ctx.fillStyle = '#94a3b8';
+                            ctx.fillRect(tx + 5, ty + TILE_SIZE - 5, TILE_SIZE - 10, 5);
+                        } else if (tile === TILES.EXIT_S) {
+                            ctx.strokeStyle = '#fbbf24';
+                            ctx.lineWidth = 3;
+                            ctx.strokeRect(tx + 5, ty + 5, TILE_SIZE - 10, TILE_SIZE - 5);
+                            ctx.fillStyle = "rgba(251, 191, 36, 0.2)";
+                            ctx.fillRect(tx + 5, ty + 5, TILE_SIZE - 10, TILE_SIZE - 5);
+                        } else if (tile === TILES.EXIT_L) {
+                            ctx.strokeStyle = '#60a5fa';
+                            ctx.lineWidth = 3;
+                            ctx.strokeRect(tx + 5, ty + 5, TILE_SIZE - 10, TILE_SIZE - 5);
+                            ctx.fillStyle = "rgba(96, 165, 250, 0.2)";
+                            ctx.fillRect(tx + 5, ty + 5, TILE_SIZE - 10, TILE_SIZE - 5);
+                        }
+                        ctx.shadowBlur = 0; // Reset for next tile
+                    }
+                }
+
+                // Draw Doors
+                this.doors.forEach(door => {
+                    ctx.fillStyle = '#64748b';
+                    if (!door.open) {
+                        ctx.fillRect(door.x * TILE_SIZE, door.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                        ctx.strokeStyle = "white";
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(door.x * TILE_SIZE + 5, door.y * TILE_SIZE + 5, TILE_SIZE - 10, TILE_SIZE - 10);
+                    } else {
+                        // Outline for open door
+                        ctx.strokeStyle = 'rgba(100, 116, 139, 0.3)';
+                        ctx.strokeRect(door.x * TILE_SIZE, door.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    }
+                    
+                    // Highlight the plate linked to this door
+                    ctx.fillStyle = door.open ? '#4ade80' : '#f87171';
+                    ctx.fillRect(door.plateX * TILE_SIZE + 10, door.plateY * TILE_SIZE + TILE_SIZE - 8, TILE_SIZE - 20, 6);
+                });
+
+                this.solar.draw();
+                this.lunar.draw();
+            },
+
+            loop() {
+                this.update();
+                this.draw();
+                requestAnimationFrame(() => this.loop());
+            }
+        };
+
+        window.onload = () => game.init();
+
+    </script>
+</body>
+</html>
